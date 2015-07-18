@@ -55,6 +55,8 @@ class BLPlayback(bpy.types.Operator):
             # compute fps
             context.scene['evaFPS'] = fps = self.computeFPS(context)
             timeScale = framerateHz/fps
+            time = self.timeList[-1]
+            dt = self.timeList[-1] - self.timeList[-2] if len(self.timeList) > 1 else 0
 
             if bpy.context.scene['evaFollowMouse']:
                 # compute mouse pos
@@ -97,16 +99,16 @@ class BLPlayback(bpy.types.Operator):
                 rampPoint = viseme.duration * viseme.rampInRatio
                 if viseme.time <= rampPoint:
                     # compute ramp in factor
-                    viseme.magnitude.target = viseme.time / rampPoint
+                    viseme.magnitude.target.base = viseme.time / rampPoint
 
                 # ramp out to 0
                 rampOutPoint = viseme.duration - viseme.duration*viseme.rampOutRatio
                 if viseme.time >= rampOutPoint:
                     # compute ramp in factor
-                    viseme.magnitude.target = 1.0 - (viseme.time - rampOutPoint) / (viseme.duration*viseme.rampOutRatio)
+                    viseme.magnitude.target.base = 1.0 - (viseme.time - rampOutPoint) / (viseme.duration*viseme.rampOutRatio)
 
                 # update action
-                viseme.magnitude.blend()
+                viseme.magnitude.blend(time, dt)
                 viseme.stripRef.influence = viseme.magnitude.current
 
                 # update time
@@ -116,8 +118,8 @@ class BLPlayback(bpy.types.Operator):
             headControl = eva.bones["head_target"]
             eyeControl = eva.bones["eye_target"]
 
-            eva.headTargetLoc.blend()
-            eva.eyeTargetLoc.blend()
+            eva.headTargetLoc.blend(time, dt)
+            eva.eyeTargetLoc.blend(time, dt)
 
             headControl.location = eva.headTargetLoc.current
             eyeControl.location = eva.eyeTargetLoc.current
