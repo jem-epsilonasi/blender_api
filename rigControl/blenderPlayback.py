@@ -118,6 +118,9 @@ class BLPlayback(bpy.types.Operator):
             headControl = eva.bones["head_target"]
             eyeControl = eva.bones["eye_target"]
 
+            # apply actuators
+            eva.actuatorManager.tick(time, dt)
+
             eva.headTargetLoc.blend(time, dt)
             eva.eyeTargetLoc.blend(time, dt)
 
@@ -147,9 +150,6 @@ class BLPlayback(bpy.types.Operator):
 
             # keep alive
             eva.keepAlive()
-
-            # apply actuators
-            eva.actuatorManager.tick(time, dt)
 
             # force update
             bpy.data.scenes['Scene'].frame_set(1)
