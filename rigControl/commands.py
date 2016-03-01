@@ -52,6 +52,7 @@ class EvaAPI(RigAPI):
         return somaStates
 
     def setSomaState(self, state):
+        print("Soma state=" + str(state))
         name = 'CYC-' + state['name']
         rate = state['rate']
         magnitude = state['magnitude']
@@ -82,6 +83,7 @@ class EvaAPI(RigAPI):
 
     def setEmotionState(self, emotion):
         # TODO: expand arguments and update doc
+        print("Express emotion=" + str(emotion))
         bpy.evaAnimationManager.setEmotion(eval(emotion))
         return 0
 
@@ -109,6 +111,8 @@ class EvaAPI(RigAPI):
 
 
     def setGesture(self, name, repeat=1, speed=1, magnitude=1.0):
+        print("Make gesture=" + name + " rep=" + str(repeat) + \
+              " spd=" + str(speed) + " mag=" + str(magnitude))
         bpy.evaAnimationManager.newGesture(name='GST-'+name, \
             repeat=repeat, speed=speed, magnitude=magnitude)
         return 0
