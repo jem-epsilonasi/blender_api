@@ -17,9 +17,16 @@ rigControl implements it.
 This youtube video shows what is currently possible:
 [Eva demo](https://www.youtube.com/watch?v=ICDo_DQbjwQ)
 
-# Running #
+# Pre-requisites #
 
-Pre-requisites: The code is designed for Blender 2.72 or higher.
+The code and the rig were designed with Blender 2.71 or 2.72. The
+gestures do not work with Blender 2.75. The file almost works with
+blender-2.69, except that the lighting is wrong.
+
+Note that Ubuntu Trusty 14.04LTS comes with 2.69.  You can upgrade
+to blender 2.71 as follows:
+
+# Running #
 Start blender as follows:
 ```
 blender -y Eva.blend -P autostart.py
@@ -50,6 +57,17 @@ revision.
   breathing, blinking and eye movement.
 
 All animation sequences and 3D data are stored in the Blender file.
+
+# Requirements #
+Some notes about some desired future changes to the API:
+
+* Distinct control of ramp-in and ramp-out for animations:
+** time of ramp start
+** time interval until ramp-full
+** strength of animation at ramp-full
+** duration of animation
+** time interval of ramp-out
+** spline for above.
 
 # Copyright #
 
