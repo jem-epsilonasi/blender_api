@@ -39,7 +39,7 @@ in the `blender_api_msgs` project.
 
 
 # Design #
-The programming API is currently in draft stage, here: 
+The programming API is currently in draft stage, here:
 [API_v1](docs/API_v1.md). What has actually been implemented does not
 match the proposed API; neither is "authoritative", both probably need
 revision.
@@ -59,15 +59,25 @@ revision.
 All animation sequences and 3D data are stored in the Blender file.
 
 # Requirements #
-Some notes about some desired future changes to the API:
+The existing API needs to be changed, to allow control of the ramp-in and
+ramp-out for animations. The API needs to expose:
 
-* Distinct control of ramp-in and ramp-out for animations:
-** time of ramp start
-** time interval until ramp-full
-** strength of animation at ramp-full
-** duration of animation
-** time interval of ramp-out
-** spline for above.
+* time of ramp start
+* time interval until ramp-full
+* strength of animation at ramp-full
+* duration of animation
+* time interval of ramp-out
+* spline for above.
+
+To implement the above, the following changes are needed:
+* Change the API to include the above parameters, as a part of the animations.
+* Change the ROS messages, to pass the above parameters.
+* Update the blender rig to respect the API requests.
+* Update the behavior trees to issue the new ROS message formats.
+
+To avoid ROS compatibility issues, the new ROS messages should probably
+be published on a different set of topics than the existing ones, so that
+both the old and the new ROS message formats could be handled for a while.
 
 # Copyright #
 
