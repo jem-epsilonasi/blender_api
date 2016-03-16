@@ -54,6 +54,12 @@ class EvaAPI(RigAPI):
     def setSomaState(self, state):
         print("Soma state=" + str(state))
         name = 'CYC-' + state['name']
+
+        # Hardcoded hack for compatibility. Should fix this in the
+        # model itself.
+        if name == 'CYC-normal':
+            name = 'CYC-normal.001'
+
         rate = state['rate']
         magnitude = state['magnitude']
         ease_in = state['ease_in']
