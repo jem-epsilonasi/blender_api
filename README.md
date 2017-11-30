@@ -44,4 +44,5 @@ All animation sequences and 3D data are stored in the Blender file.
 # Copyright
 
 Copyright (c) 2014,2015,2016,2017 Hanson Robotics
+
 Copyright (c) 2014,2015 Mike Pan
