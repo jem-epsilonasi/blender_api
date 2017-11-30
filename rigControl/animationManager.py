@@ -43,6 +43,8 @@ class AnimationManager():
 
 
         # Start default cycles
+        # These are the autonomous behaviors - breathing, blinking,
+        # saccades, head drift.
         self.setCycle('CYC-normal', rate=1.0, magnitude=1.0, ease_in=0.0)
         self.setCycle('CYC-breathing', rate=1.0, magnitude=1.0, ease_in=0.0)
         self.setCycle('CYC-normal-saccades', rate=1.0, magnitude=1.0, ease_in=0.0)

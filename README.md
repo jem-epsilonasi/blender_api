@@ -14,12 +14,13 @@ and rigControl implements it.
 
 Pre-requisites: [Blender](https://www.blender.org/) must be installed.
 
-This works well with the follwing versions:
+This works well with the following versions:
 * Version 2.71 on Ubuntu 14.04 (Trusty) from the irie ppa:
   `sudo apt-add-repository ppa:irie/blender`
 * Version 2.78 on Debian stable (Wheezy)
 
 This does NOT work with:
+* Version 2.69 (the default version) on Ubuntu 14.04 (Trusty)
 * Version 2.75 or 2.79 on Ubuntu 14.04 (Trusty) from the Thomas Schiex
   ppa: `sudo apt-add-repository ppa:thomas-schiex/blender`
   See issue #76.
@@ -36,6 +37,10 @@ the [Sophia cookbook](https://github.com/hansonrobotics/blender_api_msgs/blob/ma
 
 
 # Design
+The programming API is currently in draft stage, here:
+[API_v1](docs/API_v1.md). What has actually been implemented does not
+match the proposed API; neither is "authoritative", both probably need
+revision.
 
 ![UML Diagram](docs/evaEmoDesign.png)
 
@@ -50,6 +55,27 @@ the [Sophia cookbook](https://github.com/hansonrobotics/blender_api_msgs/blob/ma
   breathing, blinking and eye movement.
 
 All animation sequences and 3D data are stored in the Blender file.
+
+# Requirements #
+The existing API needs to be changed, to allow control of the ramp-in and
+ramp-out for animations. The API needs to expose:
+
+* time of ramp start
+* time interval until ramp-full
+* strength of animation at ramp-full
+* duration of animation
+* time interval of ramp-out
+* spline for above.
+
+To implement the above, the following changes are needed:
+* Change the API to include the above parameters, as a part of the animations.
+* Change the ROS messages, to pass the above parameters.
+* Update the blender rig to respect the API requests.
+* Update the behavior trees to issue the new ROS message formats.
+
+To avoid ROS compatibility issues, the new ROS messages should probably
+be published on a different set of topics than the existing ones, so that
+both the old and the new ROS message formats could be handled for a while.
 
 # Copyright
 

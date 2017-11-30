@@ -1,9 +1,7 @@
-*.pyc
-
-*.sublime-project
-
-*.sublime-workspace
-previews/
 *.blend?
 *.blend??
+*.pyc
+*.sublime-project
+*.sublime-workspace
+previews/
 ref/
