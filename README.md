@@ -12,8 +12,18 @@ and rigControl implements it.
 
 # Running
 
-Pre-requisites: The code is designed for Blender 2.71. It will not work
-with blender 2.75 or 2.79; see issue #76.
+Pre-requisites: [Blender](https://www.blender.org/) must be installed.
+
+This works well with the follwing versions:
+* Version 2.71 on Ubuntu 14.04 (Trusty) from the irie ppa:
+  `sudo apt-add-repository ppa:irie/blender`
+* Version 2.78 on Debian stable (Wheezy)
+
+This does NOT work with:
+* Version 2.75 or 2.79 on Ubuntu 14.04 (Trusty) from the Thomas Schiex
+  ppa: `sudo apt-add-repository ppa:thomas-schiex/blender`
+  See issue #76.
+
 Start blender as follows:
 
 ```
