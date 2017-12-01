@@ -17,7 +17,7 @@ Pre-requisites: [Blender](https://www.blender.org/) must be installed.
 This works well with the following versions:
 * Version 2.71 on Ubuntu 14.04 (Trusty) from the irie ppa:
   `sudo apt-add-repository ppa:irie/blender`
-* Version 2.78 on Debian stable (Wheezy)
+* Version 2.78 available by default on Debian 9 stable (Stretch).
 
 This does NOT work with:
 * Version 2.69 (the default version) on Ubuntu 14.04 (Trusty)
