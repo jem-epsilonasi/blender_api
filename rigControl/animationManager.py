@@ -1,9 +1,11 @@
 # AnimationManager is the primary datastore for the various paramters
 # that define the Eva character.
 
+from .actuators import ActuatorManager
+
 from . import actuators
-from .blendedNum import BlendedNum
-from .blendedAngle import BlendedAngle
+from . import blendedNum
+from .blendedNum.plumbing import Pipes, Wrappers
 from .helpers import *
 
 import math
@@ -13,25 +15,39 @@ import time
 import imp
 import pdb
 from mathutils import Vector
-
+import logging
+import re
 debug = True
-
+logger = logging.getLogger('hr.blender_api.rigcontrol.animationmanager')
 
 class AnimationManager():
-
+    d = {}
+    b = {}
     def __init__(self):
-        print('Starting AnimationManager singleton')
-
+        logger.info('Starting AnimationManager singleton')
+        # Loading Relationship between the faceshift and Sophia relation from the JSON file.
+        logger.info('Starting AnimationManager singleton')
         # Gesture params
         self.gesturesList = []
         self.emotionsList = []
         self.visemesList = []
         self.cyclesSet = set()
+        # Cycles to remove
+        self.cyclesToRemove = []
+        # Start from normal animation mode. 
+        self.mode= 0
+        self.old_mode= 0
+        self.deleted_drivers = False
+        # Shapekeys to apply on next frame
+        self.shapeKeys = {}
 
 
         # Start default cycles
+        # These are the autonomous behaviors - breathing, blinking,
+        # saccades, head drift.
         self.setCycle('CYC-normal', rate=1.0, magnitude=1.0, ease_in=0.0)
         self.setCycle('CYC-breathing', rate=1.0, magnitude=1.0, ease_in=0.0)
+        self.setCycle('CYC-normal-saccades', rate=1.0, magnitude=1.0, ease_in=0.0)
 
 
         # Scale for Blender coordinates 1 BU in m.
@@ -41,31 +57,36 @@ class AnimationManager():
         # Target minimum distance in m
         self.min_distance  = 0.1
         # Face target offset in BU
-        self.face_target_offset = -1.04
+        # -4 for Sophia 1.0, -2 for blender only
+        self.face_target_offset = -4
         # Eye_target distance in BU from 0 point
-        self.eye_target_offset = -6
-
-
+        # -4 for Sophia 1.0 -2 for blender rig
+        self.eye_target_offset = -4
+        # Face rotation
+        self.headRotation = 0
+        # Latest face target
+        self.face_target = [0,1,0]
         # Head and Eye tracking parameters
-        self.headTargetLoc = BlendedAngle([0,0,0], steps=10, smoothing=10, ang_speed=0.5, offset=[0, self.face_target_offset, 0])
-        self.eyeTargetLoc = BlendedNum([0,0,0], steps=18, smoothing=1)
+        self.headTargetLoc = blendedNum.LiveTarget([0,0,0], transition=Wrappers.wrap([
+                Pipes.exponential(7),
+                Pipes.moving_average(window=0.3)],
+                Wrappers.in_spherical(origin=[0, self.face_target_offset, 0], radius=4)
+        ))
+        self.eyeTargetLoc = blendedNum.LiveTarget([0,0,0], transition=Wrappers.wrap(
+            Pipes.linear(speed=300),
+            Wrappers.in_spherical(origin=[0, self.eye_target_offset, 0], radius=4)
+        ))
+        self.headRotation = blendedNum.LiveTarget(0, transition=Pipes.moving_average(0.4))
 
-
-        # Autonomous (unconscious) behavior parameters
-        self.eyeDartRate = 1.0
-        self.eyeWander = 1.0
-        self.blinkRate = 0.0
-        self.blinkDuration = 0.0
-
-        # Emotional parameters
-        self.swiftness = 1.0
-        self.shyness = 1.0
-        self.idle = 0.0
+        self.actuatorManager = ActuatorManager()
 
         # Internal vars
         self._time = 0
         self.nextTrigger = {}
-
+        # Last time eyes were set by gaze
+        self.eyes_gazing = 0
+        # Maximum time for eyes to be controlled by gaze. After that time eyes will be controlled by face target.
+        self.max_eye_gaze = 0.2
         # global access
         self.deformObj = bpy.data.objects['deform']
         self.bones = bpy.data.objects['control'].pose.bones
@@ -100,26 +121,6 @@ class AnimationManager():
             imp.reload(actuators)
 
 
-    def keepAlive(self):
-        '''Called every frame, used to dispatch animation actuators'''
-        self.idle += 1.0
-
-        for cycle in self.cyclesSet:
-            actuators.doCycle(self, cycle)
-
-        if True and self.randomFrequency('dart', self.eyeDartRate):
-            actuators.eyeSaccades(self, self.eyeWander)
-
-        if True and self.randomFrequency('blink', self.blinkRate):
-            actuators.blink(self, self.blinkDuration)
-
-        if True and self.randomFrequency('headTargetLoc', 1):
-            actuators.headDrift(self)
-
-        if True and self.randomFrequency('emotionJitter', 20):
-            actuators.emotionJitter(self)
-
-
     # Show all attributes
     def __repr__(self):
         string = ""
@@ -127,6 +128,89 @@ class AnimationManager():
             if not attr.startswith('_'):
                 string += str(attr) + ": " + str(value) + "\n"
         return string
+
+    def setMode(self,mode):
+        self.mode = mode
+        self.shapeKeys = {}
+        return 0
+
+    def changeMode(self):
+        if self.mode != self.old_mode:
+            self.old_mode = self.mode
+            # Restore original drivers
+            if self.mode == 0:
+                bpy.context.scene['keepAlive'] = True
+                bpy.evaAnimationManager.deformObj.pose.bones['chin'].location[2]=0
+                self.setHeadRotation(0)
+                self.setFaceTarget([0,1,0])
+                self.setGazeTarget([0,1,0])
+                for key in self.b:
+                    #The key holds the value of the shapekey name.
+                    driverdata= bpy.data.shape_keys['ShapeKeys'].key_blocks[key].driver_add('value', -1)
+                    drv= driverdata.driver
+                    drv.type= self.b[key][0]['type']
+                    drv.expression=self.b[key][1]['exp']
+                    variable= self.b[key][2]
+                    for i in variable['var']:
+                        var= drv.variables.new()
+                        var.name=i[0]['name']
+                        var.type=i[1]['type']
+                        targ= var.targets[0]
+                        targ.id=i[2]['targ'][0]['id']
+                        targ.bone_target=i[2]['targ'][1]['bone']
+                        targ.transform_type=i[2]['targ'][2]['type']
+                        targ.transform_space=i[2]['targ'][3]['space']
+                        self.deleted_drivers = False
+            else:
+                bpy.context.scene['keepAlive']
+
+    def getMode(self):
+        return self.mode
+
+    def setShapeKeys(self,shape_keys):
+        self.shapeKeys = shape_keys
+
+    def applyShapeKeys(self):
+        if self.shapeKeys and self.mode:
+            self.setShape(self.shapeKeys)
+            self.shapeKeys = {}
+
+    def setShape(self, dict_shape):
+        # Delete the driver related items.
+        if not self.deleted_drivers:
+            for i in bpy.data.shape_keys['ShapeKeys'].animation_data.drivers:
+                key=re.search('"(.*)"',i.data_path).group(1)
+                if key in dict_shape:
+                    list_value=[]
+                    drv= i
+                    list_value.append({'type':drv.driver.type})
+                    list_value.append({'exp' : drv.driver.expression})
+                    variable= []
+                    for vr in drv.driver.variables:
+                        var=[]
+                        var.append({"name":vr.name})
+                        var.append({"type":vr.type})
+                        targ=[]
+                        tr = vr.targets[0]
+                        targ.append({'id':tr.id})
+                        targ.append({'bone':tr.bone_target})
+                        targ.append({'type':tr.transform_type})
+                        targ.append({'space':tr.transform_space})
+                        var.append({'targ':targ})
+                        variable.append(var)
+                    list_value.append({'var':variable})
+                    global b
+                    self.b[key]=list_value
+                    #Now the b[key] value hold the values where there is some assignment has been done.
+                    bpy.data.shape_keys['ShapeKeys'].key_blocks[key].driver_remove('value', -1)
+                    self.deleted_drivers= True
+
+        for key in dict_shape:
+            if(key=='lip-JAW.DN'):
+                bpy.evaAnimationManager.deformObj.pose.bones['chin'].location[2]= dict_shape[key]
+            else:
+                bpy.data.shape_keys['ShapeKeys'].key_blocks[key].value= dict_shape[key]
+
 
 
     def newGesture(self, name, repeat = 1, speed=1, magnitude=0.5, priority=1):
@@ -156,7 +240,10 @@ class AnimationManager():
         duration = (newStrip.frame_end - newStrip.frame_start)
         newStrip.blend_type = 'ADD'
         newStrip.use_animated_time = True
-
+        # Create the strip time function
+        f = newStrip.fcurves.items()[0][1]
+        # Point at 1st frame
+        strip_time_kfp = f.keyframe_points.insert(1,0,{'FAST'})
         # force blink to play at 1.0 intensity
         if 'blink' in name.lower():
             magnitude = 1
@@ -164,10 +251,12 @@ class AnimationManager():
         if magnitude < 1:
             newStrip.use_animated_influence = True
             newStrip.influence = magnitude
+            ifc = newStrip.fcurves.items()[1][1]
+            ifc.keyframe_points.insert(1, magnitude, {'FAST'})
 
         # Create object and add to list
         g = Gesture(name, newTrack, newStrip, duration=duration, speed=speed, \
-             magnitude=magnitude, priority=priority, repeat=repeat)
+             magnitude=magnitude, priority=priority, repeat=repeat, strip_time_kfp=strip_time_kfp)
         self.gesturesList.append(g)
 
 
@@ -186,20 +275,48 @@ class AnimationManager():
             try:
                 control = self.bones['EMO-'+emotionName]
             except KeyError:
-                print('Cannot set emotion. No bone with name ', emotionName)
+                logger.error('Cannot set emotion. No bone with name {}'.format(emotionName))
                 continue
             else:
                 found = False
+                emo = None
+                start = 0
                 for emotion in self.emotionsList:
                     if emotionName == emotion.name:
-                        # update magnitude
-                        emotion.magnitude.target = data['magnitude']
-                        emotion.duration = data['duration']
+                        emo = emotion
+                        start = emo.magnitude.current
                         found = True
 
+
+                num = blendedNum.Trajectory(start)
+                    # min 0.5s max 1.5s
+                fade = min(2.0,max(2.0/3.0, 3.0/float(data['duration'])))
+                # Fixme for whatever reason the timed keyframe needs time from beginning,
+                # meaning that need to substract only the fadeout time.
+                keep = max(0.0, data['duration'] - 1.0/fade)
+                # Fade Slower for less magnitude
+                fade = fade / data['magnitude']
+
+                num.add_keyframe(target=data['magnitude'], transition=[
+                    (0, Pipes.linear(fade)), (1, Pipes.moving_average(0.2))])
+                if keep > 0:
+                    num.add_keyframe(target=data['magnitude'], time=keep)
+                num.add_keyframe(target=0.0, transition=[
+                    (0, Pipes.linear(fade)), (1, Pipes.moving_average(0.2))])
                 if not found:
-                    emotion = Emotion(emotionName, magnitude = BlendedNum(data['magnitude'], steps = 10, smoothing = 10), duration = data['duration'])
+                    emotion = Emotion(emotionName, magnitude=num)
                     self.emotionsList.append(emotion)
+                else:
+                    emo.magnitude = num
+                # Fade all existing expressions
+                for emotion in self.emotionsList:
+                    if emotionName != emotion.name:
+                        # In addition needs to check if its about to finish
+                        start = emotion.magnitude.current
+                        num = blendedNum.Trajectory(start)
+                        num.add_keyframe(target=0.0, transition=[
+                             (0, Pipes.linear(fade)), (1, Pipes.moving_average(0.2))])
+                        emotion.magnitude = num
 
 
     def newViseme(self, vis, duration=0.5, rampInRatio=0.1, rampOutRatio=0.8, startTime=0):
@@ -235,25 +352,30 @@ class AnimationManager():
         newStrip.blend_type = 'ADD'
         newStrip.use_animated_influence = True
         newStrip.influence = 0
-
+        # Get influence function
+        f = newStrip.fcurves.items()[0][1]
+        # Point at 1st frame
+        influence_kfp = f.keyframe_points.insert(1,0,{'FAST'})
         # Create object and add to list
-        v = Viseme(action.name, newTrack, newStrip, duration, rampInRatio, rampOutRatio, startTime)
+        v = Viseme(action.name, newTrack, newStrip, duration, rampInRatio, rampOutRatio, startTime, influence_kfp)
         self.visemesList.append(v)
 
         return True
 
+    def removeCycles(self):
+        cycles = self.cyclesToRemove[:]
+        for c in cycles:
+            toRemove = [cycle for cycle in self.cyclesSet if cycle.name == c]
+            for cycle in toRemove:
+                self.cyclesSet.remove(cycle)
+            toRemove = [gesture for gesture in self.gesturesList if gesture.name == c]
+            for gesture in toRemove:
+                self._deleteGesture(gesture)
+            self.cyclesToRemove.remove(c)
 
     def setCycle(self, name, rate, magnitude, ease_in):
         if magnitude == 0:
-            # Remove cycle
-            toRemove = [cycle for cycle in self.cyclesSet if cycle.name == name]
-            for cycle in toRemove:
-                self.cyclesSet.remove(cycle)
-
-            toRemove = [gesture for gesture in self.gesturesList if gesture.name == name]
-            for gesture in toRemove:
-                self._deleteGesture(gesture)
-            return 0
+            self.cyclesToRemove.append(name)
         else:
             # Check value for sanity
             checkValue(rate, 0.1, 10)
@@ -264,7 +386,42 @@ class AnimationManager():
             self.cyclesSet.discard(newCycle)
             self.cyclesSet.add(newCycle)
 
+    #========== define unique cycles that don't conform to name rate magnitude parameter ============
+    def setBlinkRandomly(self,interval_mean,interval_variation):
+        '''enable if necessary and update the blink rate of the artistic actuator'''
 
+        if bpy.data.scenes["Scene"].actuators.ACT_blink_randomly.HEAD_PARAM_enabled == False:
+           bpy.data.scenes["Scene"].actuators.ACT_blink_randomly.HEAD_PARAM_enabled = True
+           print("enabled blinking")
+        checkValue(interval_mean,0.5,10)
+        checkValue(interval_variation,0.0,interval_mean)
+        print('changing blink rate to ',interval_mean)
+        bpy.data.scenes["Scene"].actuators.ACT_blink_randomly.PARAM_interval_mean=interval_mean
+        bpy.data.scenes["Scene"].actuators.ACT_blink_randomly.PARAM_interval_variation=interval_variation
+        # if reset delete and restart actuator
+
+    def setSaccade(self,interval_mean,interval_variation,paint_scale,eye_size,eye_distance,mouth_width,mouth_height,weight_eyes,weight_mouth):
+        '''enable if necessary and update the saccade rate of the artistic actuator'''
+        if bpy.data.scenes["Scene"].actuators.ACT_saccade.HEAD_PARAM_enabled == False:
+            bpy.data.scenes["Scene"].actuators.ACT_saccade.HEAD_PARAM_enabled = True
+            print("enabled saccades")
+        checkValue(interval_mean,0.1,5)
+        checkValue(interval_variation,0.0,interval_mean)
+
+        bpy.data.scenes["Scene"].actuators.ACT_saccade.PARAM_interval_mean=interval_mean
+        bpy.data.scenes["Scene"].actuators.ACT_saccade.PARAM_interval_variation=interval_variation
+        bpy.data.scenes["Scene"].actuators.ACT_saccade.PARAM_paint_scale=paint_scale
+        # heat map parameters
+        bpy.data.scenes["Scene"].actuators.ACT_saccade.PARAM_eye_size=eye_size
+        bpy.data.scenes["Scene"].actuators.ACT_saccade.PARAM_eye_distance=eye_distance
+        bpy.data.scenes["Scene"].actuators.ACT_saccade.PARAM_mouth_width=mouth_width
+        bpy.data.scenes["Scene"].actuators.ACT_saccade.PARAM_mouth_height=mouth_height
+        bpy.data.scenes["Scene"].actuators.ACT_saccade.PARAM_weight_mouth=weight_mouth
+        bpy.data.scenes["Scene"].actuators.ACT_saccade.PARAM_weight_eyes=weight_eyes
+
+
+
+        # if reset delete and restart actuator
     def _deleteViseme(self, viseme):
             ''' internal use only, stops and deletes a viseme'''
             # remove from list
@@ -274,7 +431,7 @@ class AnimationManager():
             self.deformObj.animation_data.nla_tracks.remove(viseme.trackRef)
 
 
-    def coordConvert(self, loc, currbu, offset= 0):
+    def coordConvert(self, loc, currbu, offset=0):
         '''Convert coordinates from meters to blender units. The
         coordinate frame used here is y is straight-ahead, x is th the
         right, and z is up.
@@ -293,46 +450,49 @@ class AnimationManager():
         # Compute distance from previous eye position
         distance = computeDistance(locBU, currbu)
 
-        # Behavior: if the point being looked at changed
-        # significantly, then micro-blink.
-
-        if self.randomFrequency('blink', 20):
-            if (distance + abs(offset)) > 7.9:
-                self.newGesture('GST-blink', priority=1)
-            elif (distance + abs(offset)) > 6.5:
-                self.newGesture('TRN-waitBlink', priority=1)
-
         return locBU
 
 
-    def setFaceTarget(self, loc):
+    def setFaceTarget(self, loc, speed=1.0):
         '''Set the target used by eye and face tracking.'''
-
+        # If speed is not set default speed is used.
+        if speed < 0.01:
+            duration = 0.1
+        else:
+            duration = max(0.1 / (speed**2), 0.02)
         locBU = self.coordConvert(loc, self.eyeTargetLoc.current, self.face_target_offset)
+        self.headTargetLoc.transition = Wrappers.wrap([
+                Pipes.exponential(7),
+                Pipes.moving_average(window=duration)],
+                Wrappers.in_spherical(origin=[0, self.face_target_offset, 0], radius=4)
+        )
+
         self.headTargetLoc.target = locBU
-        # Change offset for the eyes
-        locBU[1] = locBU[1] - self.face_target_offset + self.eye_target_offset
+        if time.time() - self.eyes_gazing > self.max_eye_gaze:
+            # Change offset for the eyes
+            locBU[1] = locBU[1] - self.face_target_offset + self.eye_target_offset
 
-        # Change eye speed for tracking depending on delta of current to new location
-        if (abs((Vector(locBU) - Vector(self.eyeTargetLoc.current)).length) > 2.2):
-            self.eyeTargetLoc.smoothing = 1
-            self.eyeTargetLoc.steps = 30
-        else:
-            self.eyeTargetLoc.smoothing = 1
-            self.eyeTargetLoc.steps = 18
-        self.eyeTargetLoc.target = locBU
+            # Move eyes too, really fast
+            self.eyeTargetLoc.transition = Wrappers.wrap([
+                    Pipes.linear(speed=300)],
+                Wrappers.in_spherical(origin=[0, self.eye_target_offset, 0], radius=4))
+            self.eyeTargetLoc.target = locBU
 
-    def setGazeTarget(self, loc):
+
+    # Rotates the face target which will make head roll
+    def setHeadRotation(self,rot):
+        self.headRotation.target = rot
+
+    def setGazeTarget(self, loc, speed=1):
         '''Set the target used for eye tracking only.'''
-
+        ''' Ignores speed for now. Eyes should always move fast '''
+        self.eyes_gazing = time.time()
         locBU = self.coordConvert(loc, self.eyeTargetLoc.current, self.eye_target_offset)
-        # Change eye speed for tracking depending on delta of current to new location
-        if (abs((Vector(locBU) - Vector(self.eyeTargetLoc.current)).length) > 2.2):
-            self.eyeTargetLoc.smoothing = 5
-            self.eyeTargetLoc.steps = 5
-        else:
-            self.eyeTargetLoc.smoothing = 2
-            self.eyeTargetLoc.steps = 5
+
+        self.eyeTargetLoc.transition = Wrappers.wrap(
+            Pipes.linear(speed=300),
+            Wrappers.in_spherical(origin=[0, self.eye_target_offset, 0], radius=4)
+        )
         self.eyeTargetLoc.target = locBU
 
     def setViseme(self):
@@ -374,16 +534,15 @@ class AnimationManager():
 
 class Emotion():
     '''Represents an emotion'''
-    def __init__(self, name, magnitude, duration):
+    def __init__(self, name, magnitude):
         self.name = name
         self.magnitude = magnitude
-        self.duration = duration
         self.priority = 0
 
 
 class Gesture():
     '''Represents a blender actions'''
-    def __init__(self, name, track, strip, duration, speed, magnitude, priority, repeat):
+    def __init__(self, name, track, strip, duration, speed, magnitude, priority, repeat, strip_time_kfp):
         self.name = name
         self.duration = duration
         self.magnitude = magnitude
@@ -394,29 +553,55 @@ class Gesture():
         self.trackRef = track
         self.stripRef = strip
 
+        self.strip_time_kfp = strip_time_kfp
 
 class Viseme():
     '''Represents a Viseme'''
-    def __init__(self, vis, track, strip, duration, rampInRatio, rampOutRatio, startTime):
+    def __init__(self, vis, track, strip, duration, rampInRatio, rampOutRatio, startTime, influence_kfp):
         self.vis = vis
         self.trackRef = track
         self.stripRef = strip
         self.duration = duration  		# duration of animation in seconds
-        self.time = 0 - startTime 		# -time is scheduled for the future (seconds)
-                                        # 0 is happening right away
-                                        # +time is animation in progress (seconds)
-        self.magnitude = BlendedNum(0, steps=2, smoothing=4) 	# normalized amplitude
-        self.rampInRatio = rampInRatio 		# percentage of time spent blending in
-        self.rampOutRatio = rampOutRatio 	# percentage of time spent blending out
+        self.influence_kfp = influence_kfp  # Influence keyframe point to change influence
+        # startTime - seconds to wait before playing this Viseme
+        # rampInRatio - percentage of time spent blending in
+        # rampOutRatio - percentage of time spent blending out
 
+        # Convert time percentages to transition speeds
+        speedIn = 1/(max(rampInRatio * duration, 0.01))
+        speedOut = 1/(max(rampOutRatio * duration, 0.01))
+
+        # Calculate when to start transitioning out
+        startOut = (1-rampOutRatio) * duration + startTime
+
+        # Set up the trajectory for the magnitude
+        num = blendedNum.Trajectory(0)
+        num.add_keyframe(target=0.0, time=startTime, transition=(1, Pipes.moving_average(0.2)))
+        num.add_keyframe(target=1.0, time=startOut, transition=(0, Pipes.linear(speedIn)))
+        num.add_keyframe(target=0.0, transition=(0, Pipes.linear(speedOut)))
+        self.magnitude = num # normalized amplitutde
 
 class Cycle():
     ''' Represents a cyclic gesture, or 'soma' '''
     def __init__(self, name, rate, magnitude, ease_in):
         self.name = name
         self.rate = rate
-        self.magnitude = magnitude
+        self._magnitude = magnitude
         self.ease_in = ease_in
+        self.time_started = time.time()
+
+    # Magnitude based on ease_in time
+    @property
+    def magnitude(self):
+        if self.ease_in > 0.1:
+            ease = min(1, (time.time() - (self.time_started))/self.ease_in)
+            return self._magnitude * ease
+        else:
+            return self._magnitude
+
+    @magnitude.setter
+    def magnitude(self,value):
+        self._magnitude = value
 
     def __eq__(self, other):
         return self.name == other.name
@@ -424,10 +609,9 @@ class Cycle():
     def __hash__(self):
         return hash(self.name)
 
-
 def init():
     '''Create AnimationManager singleton and make it available for global access'''
     if hasattr(bpy, 'evaAnimationManager'):
-        print('Skipping Singleton instantiation')
+        logger.info('Skipping Singleton instantiation')
     else:
         bpy.evaAnimationManager = AnimationManager()

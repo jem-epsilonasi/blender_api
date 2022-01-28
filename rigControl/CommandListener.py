@@ -1,16 +1,18 @@
 # This module sets up a modal operator in Blender to act
 # as the command listener for external events
 
-commandRateHz = 10
 debug = True
 
 import bpy
-
+import pprint
 from . import commands
 from rigAPI import CommandSource
+import logging
 
 import imp
 imp.reload(commands)
+
+logger = logging.getLogger('hr.blender_api.rigcontrol.commandlistener')
 
 class BLCommandListener(bpy.types.Operator):
     """Listens for external commands"""
@@ -18,15 +20,14 @@ class BLCommandListener(bpy.types.Operator):
     bl_idname = 'wm.command_listener'
 
     cmd_sources = None
-    _timer = None
     bpy.types.Scene.commandListenerActive = bpy.props.BoolProperty( name = "commandListenerActive", default=False)
     bpy.context.scene['commandListenerActive'] = False
 
     def modal(self, context, event):
-        #if debug and event.type in {'ESC'}:
-            #return self.cancel(context)
+        if debug and event.type in {'ESC'}:
+            return self.cancel(context)
 
-        if debug and event.type == 'TIMER':
+        if debug and event.type == 'TIMER' and bpy.context.scene['commandListenerActive']:
             # print('Running Command Listener', round(self._timer.time_duration,3))
 
             # Poll each possible command source, see if it has anything
@@ -43,46 +44,38 @@ class BLCommandListener(bpy.types.Operator):
             for src in self.cmd_sources:
                 src.push()
 
-
-        # set status
-        bpy.context.scene['commandListenerActive'] = True
         return {'PASS_THROUGH'}
 
 
     def execute(self, context):
-        print('Starting Command Listener')
+        if self.poll(context):
+            logger.info('Starting Command Listener')
 
-        # Load cmd sources on first press of the button
-        if self.cmd_sources == None:
-            type(self).cmd_sources, names = load_cmd_sources()
-            if len(self.cmd_sources) > 0:
-                print("Command Source '%s' loaded" % ', '.join(names))
+            # Load cmd sources on first press of the button
+            if self.cmd_sources == None:
+                type(self).cmd_sources, names = load_cmd_sources()
+                if len(self.cmd_sources) > 0:
+                    logger.info("Command Source '%s' loaded" % ', '.join(names))
+                else:
+                    logger.warn('No Command Sources found')
+            if not bpy.context.scene['globalTimerStarted']:
+                bpy.ops.wm.global_timer()
+            success = True
+            for src in self.cmd_sources:
+                src.init()
+                success = src.push()
+
+            if success:
+                wm = context.window_manager
+                wm.modal_handler_add(self)
+                bpy.context.scene['commandListenerActive'] = True
+                return {'RUNNING_MODAL'}
             else:
-                print('No Command Sources found')
-
-        success = True
-        for src in self.cmd_sources:
-            src.push()
-            success = success and src.init()
-
-        if success:
-            wm = context.window_manager
-            self._timer = wm.event_timer_add(1/commandRateHz, context.window)
-            wm.modal_handler_add(self)
-            bpy.context.scene['commandListenerActive'] = True
-            return {'RUNNING_MODAL'}
-        else:
-            print('Error connecting to external interface, stopping')
-            return {'CANCELLED'}
-
+                logger.error('Error connecting to external interface, stopping')
+                return {'CANCELLED'}
 
     def cancel(self, context):
-        print('Stopping Command Listener')
-        if self._timer:
-            wm = context.window_manager
-            wm.event_timer_remove(self._timer)
-        else:
-            print('no timer')
+        logger.info('Stopping Command Listener')
 
         for src in self.cmd_sources:
             src.drop()
@@ -94,7 +87,6 @@ class BLCommandListener(bpy.types.Operator):
     @classmethod
     def poll(cls, context):
         return not bpy.context.scene['commandListenerActive']
-        # return True
 
 
 def register():
@@ -109,8 +101,8 @@ def refresh():
     try:
         register()
     except Exception as E:
-        print('re-registering')
-        print(E)
+        logger.info('re-registering')
+        logger.warn(E)
         unregister()
         register()
 
@@ -132,6 +124,6 @@ def load_cmd_sources():
             cmdsrcs.append(node)
             names.append(point.name)
         except ImportError:
-            print("Command Source '%s' won't build" % point.name)
+            logger.error("Command Source '%s' won't build" % point.name)
 
     return cmdsrcs, names

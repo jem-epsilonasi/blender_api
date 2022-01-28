@@ -1,11 +1,13 @@
 # Implements the commands defined by the public API
 import bpy
-from  mathutils import Matrix
+from mathutils import Matrix, Euler
 from math import pi
 from collections import OrderedDict
+import logging
 
 from rigAPI.rigAPI import RigAPI
 
+logger = logging.getLogger('hr.blender_api.rigcontrol.commands')
 # ====================================================
 
 def init():
@@ -20,17 +22,58 @@ def terminate():
 
 
 class EvaAPI(RigAPI):
+    PAU_HEAD_YAW = 1
+    PAU_HEAD_PITCH = 2
+    PAU_HEAD_ROLL = 4
+    PAU_EYE_TARGET = 8
+    PAU_FACE = 16
+    # Flag which determines if currently PAU messages are being transmitted
+    PAU_ACTIVE = 128
+    PAU_ACTIVE_TIMEOUT = 0.5
 
     def __init__(self):
+        # Current animation mode (combined by addition)
+        # 0 - Face eyes and head controlled by animations
+        # 1 - head yaw controlled by PAU
+        # 2 - head pitch controlled by PAU
+        # 4 - head roll controlled by PAU
+        # 8 - Eye Target controlled by PAU
+        # 16 - Face shapekeys controlled by PAU
+        self.pauAnimationMode = 0
+        # If 1 current shapekeys are controlled directly by PAU, otherwise by default drivers
+        self.shapekeysControl = 0
+        # Time for PAU controls to expire
+        self.pauTimeout = 0
         pass
 
-    # System control and information commands ===========
+
     def getAPIVersion(self):
         return 4
 
     def isAlive(self):
         return int(bpy.context.scene['animationPlaybackActive'])
+    # Faceshift to ROS mapping functions
+    def getAnimationMode(self):
 
+        return self.pauAnimationMode
+
+    def setAnimationMode(self, animation_mode):
+
+        ## Now let's delete the shape
+        if self.pauAnimationMode != animation_mode:
+            print(animation_mode)
+            # Face should drivers should be disabled
+            # Face drivers are enabled on the first PAU message recieved if the correct animation mode is set.
+            if animation_mode & (self.PAU_FACE | self.PAU_ACTIVE) == (self.PAU_FACE | self.PAU_ACTIVE):
+                bpy.evaAnimationManager.setMode(1)
+            else:
+                 bpy.evaAnimationManager.setMode(0)
+            self.pauAnimationMode = animation_mode
+        return 0
+
+    def setShapeKeys(self, shape_keys):
+        bpy.evaAnimationManager.setShapeKeys(shape_keys)
+        return 0
     # Somatic states  --------------------------------
     # awake, asleep, drunk, dazed and confused ...
     def availableSomaStates(self):
@@ -75,8 +118,7 @@ class EvaAPI(RigAPI):
         emotionStates = {}
         for emotion in eva.emotionsList:
             magnitude = round(emotion.magnitude.current, 3)
-            duration = round(emotion.duration, 3)
-            emotionStates[emotion.name] = {'magnitude': magnitude, 'duration': duration}
+            emotionStates[emotion.name] = {'magnitude': magnitude}
         return emotionStates
 
 
@@ -118,14 +160,6 @@ class EvaAPI(RigAPI):
         ## TODO
         return 0
 
-    def getGestureParams(self):
-        eva = bpy.evaAnimationManager
-        return {'eyeDartRate': round(eva.eyeDartRate, 3),
-                'eyeWander': round(eva.eyeWander, 3),
-                'blinkRate': round(eva.blinkRate, 3),
-                'blinkDuration': round(eva.blinkDuration, 3)}
-
-
     # Visemes --------------------------------------
     def availableVisemes(self):
         visemes = []
@@ -141,21 +175,35 @@ class EvaAPI(RigAPI):
             rampin, rampout, start)
 
     # Eye look-at targets ==========================
-    # The coordinate system used is head-relative, in 'engineering'
+    # The coordinate system used is head-relative, in 'engineering'public_ws/src/blender_api/rigControl/commands.py:135
     # coordinates: 'x' is forward, 'y' to the left, and 'z' up.
     # Distances are measured in meters.  Origin of the coordinate
     # system is somewhere (where?) in the middle of the head.
 
-    def setFaceTarget(self, loc):
+    def setFaceTarget(self, loc, speed=1.0):
         # Eva uses y==forward x==right. Distances in meters from
         # somewhere in the middle of the head.
-        mloc = [-loc[1], loc[0], loc[2]]
-        bpy.evaAnimationManager.setFaceTarget(mloc)
+        mloc = [loc[1], loc[0], loc[2]]
+        bpy.evaAnimationManager.setFaceTarget(mloc, speed)
         return 0
 
-    def setGazeTarget(self, loc):
-        mloc = [-loc[1],  loc[0], loc[2]]
-        bpy.evaAnimationManager.setGazeTarget(mloc)
+    # Rotates the face target which will make head roll
+    def setHeadRotation(self,rot):
+        bpy.evaAnimationManager.setHeadRotation(rot)
+        return 0
+
+
+    def setGazeTarget(self, loc, speed=1.0):
+        mloc = [loc[1],  loc[0], loc[2]]
+        bpy.evaAnimationManager.setGazeTarget(mloc, speed)
+        return 0
+    # ========== procedural animations with unique parameters =============
+    def setBlinkRandomly(self,interval_mean,interval_variation):
+        bpy.evaAnimationManager.setBlinkRandomly(interval_mean,interval_variation)
+        return 0
+
+    def setSaccade(self,interval_mean,interval_variation,paint_scale,eye_size,eye_distance,mouth_width,mouth_height,weight_eyes,weight_mouth):
+        bpy.evaAnimationManager.setSaccade(interval_mean,interval_variation,paint_scale,eye_size,eye_distance,mouth_width,mouth_height,weight_eyes,weight_mouth)
         return 0
 
     # ========== info dump for ROS, Should return non-blender data structures
@@ -210,12 +258,49 @@ class EvaAPI(RigAPI):
         shapekeys = OrderedDict()
         for shapekeyGroup in bpy.data.shape_keys:
             # Hardcoded to find the correct group
-            if shapekeyGroup.name == 'Key.007':
+            if shapekeyGroup.name == 'ShapeKeys':
                 for kb in shapekeyGroup.key_blocks:
                     shapekeys[kb.name] = kb.value
 
         # Fake the jaw shapekey from its z coordinate
         jawz = bpy.evaAnimationManager.deformObj.pose.bones['chin'].location[2]
-        shapekeys['jaw'] = min(max(jawz/0.3, 0), 1)
+        shapekeys['jaw'] = min(max(jawz*7.142, 0), 1)
 
         return shapekeys
+
+
+    def setNeckRotation(self, pitch, roll):
+        bpy.evaAnimationManager.deformObj.pose.bones['DEF-neck'].rotation_euler = Euler((pitch, 0, roll))
+
+    def setParam(self, key, value):
+        cmd = "%s=%s" % (str(key), str(value))
+        logger.info("Run %s" % cmd)
+        try:
+            exec(cmd)
+        except Exception as ex:
+            logger.error("Error %s" % ex)
+            return False
+        return True
+
+    def getParam(self, param):
+        param = param.strip()
+        logger.info("Get %s" % param)
+        try:
+            return str(eval(param))
+        except Exception as ex:
+            logger.error("Error %s" % ex)
+
+    def getAnimationLength(self, animation):
+        animation = "GST-"+animation
+        if not animation in bpy.data.actions.keys():
+            return 0
+        else:
+            frame_range = bpy.data.actions[animation].frame_range
+            frames = 1+frame_range[1]-frame_range[0]
+            return frames / bpy.context.scene.render.fps
+
+    def getCurrentFrame(self):
+        if bpy.context.object.animation_data.action is not None:
+            name = bpy.context.object.animation_data.action.name
+            frame = bpy.context.scene.frame_current
+            return (name, frame)
