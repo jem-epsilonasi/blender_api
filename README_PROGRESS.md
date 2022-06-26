@@ -49,18 +49,18 @@ Here is an excerpt of an email thread between myself and reslav.hollos@gmail.com
 >Best,
 >Reslav
 
-#How to run original (working) Eva head
+# How to run original (working) Eva head
 + Download the 2.79b blender version from the url listed above
 + cd <path to blender>\2.79\python\bin
 + python.exe -m ensurepip
 + Now navigate to the blender_api folder as mentioned above and run it
 
-#Issue with the existing Sophia.blend file
+# Issue with the existing Sophia.blend file
 + The 2.79b blender is the last version of blender that will run it.
 + The blender rendering engine was replaced with an alternative in subsequent releases.
 + mods attempted by Reslav succeeded in allowing newer rendering to work, but the underlying python api was broken by the attempt
 
-#Discussion with Nicap in the Blender chat website
+# Discussion with Nicap in the Blender chat website
 This opencob exchange contains link to dscussion with Nicap, see below. It has supporting images that might be useful. You will need to get yourself an account to view.
 
 <Hi Reslav, first let me thank you again for helping out! 
