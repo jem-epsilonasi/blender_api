@@ -91,7 +91,7 @@ This opencog exchange contains link to dscussion with Nicap, see below. It has s
 Note that the "fingers crossed" were in vain because fixing the rendering didn't work with the python api: we are missing something
 vital about how to convert those blender files, we need an expert!
 
-The approach to solving this is still valid: fix the rendering issue with the Sohia.blend and 2.79b blender: Instead of "Blender Render" and choose  "Cycles Render" in the top bar of the blender UI. 
+The approach to solving this is still valid: fix the rendering issue with the Sophia.blend and 2.79b blender: Instead of "Blender Render" and choose  "Cycles Render" in the top bar of the blender UI. 
 If you can't get your "blend file" image to load the python cleanly, obviously the conversion didn't work: we need to be able to run the python!!!!!!!!!!!!!
 If your converted blend file renders nicely, AND you can run the gestures within the blender api we're in business: save it out and try successive versions of blender to get to the latest one. Then swap your blend file with the one in the "blender_api" repo and make sure docker is loading up the same blender version: This should all start up from within a docker container.
 
