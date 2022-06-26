@@ -49,11 +49,18 @@ Here is an excerpt of an email thread between myself and reslav.hollos@gmail.com
 >Best,
 >Reslav
 
+# Discussion on the opencog/googlegroups.com website
+Please search the opencog discussion for "Eva Impasse". There is a video of the Sophia.blend head working with the 2.79b blender
+(outside of docker). This is the link: [animations] (https://04735475913824401098.googlegroups.com/attach/19054d7814f89/simplescreenrecorder-2022-03-06_10.45.45.mp4?part=0.1&view=1&vt=ANaJVrHp7cB65GdhAIvHyJNuldjPyrEOXJSyx8ksj_Dwg2sxwaZsgqZ09iy8iXt32hsHLb6jaYIejMR00_3ofGsxHs0Bwyu0Ck-jjh9gTzuJHmle7nIBV6o)
+
 # How to run original (working) Eva head
 + Download the 2.79b blender version from the url listed above
 + cd <path to blender>\2.79\python\bin
 + python.exe -m ensurepip
-+ Now navigate to the blender_api folder as mentioned above and run it
++ Now navigate to the blender_api folder as mentioned above and run it:
++ git clone https://github.com/opencog/blender_api.git
++ cd blender_api
++ blender -y Sophia.blend -P autostart.py
 
 # Issue with the existing Sophia.blend file
 + The 2.79b blender is the last version of blender that will run it.
@@ -61,7 +68,7 @@ Here is an excerpt of an email thread between myself and reslav.hollos@gmail.com
 + mods attempted by Reslav succeeded in allowing newer rendering to work, but the underlying python api was broken by the attempt
 
 # Discussion with Nicap in the Blender chat website
-This opencob exchange contains link to dscussion with Nicap, see below. It has supporting images that might be useful. You will need to get yourself an account to view.
+This opencog exchange contains link to dscussion with Nicap, see below. It has supporting images that might be useful. You will need to get yourself an account to view.
 
 <Hi Reslav, first let me thank you again for helping out! 
 >I think your changes are fine to get us going BUT we need to do them in the right order, on the right version etc. (I think we got our wires crossed slightly because the repo commit I gave you was the untouched AS IS Eva Impasse commit. No fixes whatsoever are done.
