@@ -35,6 +35,11 @@ Sophia can be controlled via buttons in the blender GUI (note the panel
 on the right).  A HOWTO guide for manipulating via ROS can be found in
 the [Sophia cookbook](https://github.com/hansonrobotics/blender_api_msgs/blob/master/cookbook.md)
 
+## Newer versions of Blender
+The rig does not work with newer versionf of Blender. There have been
+some efforts to port it, but these are incomplete.  See the
+[progress report](README_PROGRESS.md) for status and hints.
+***Wanted!*** **A Blender expert who can port over the old rig!**
 
 # Design
 The programming API is currently in draft stage, here:
