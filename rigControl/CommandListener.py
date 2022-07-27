@@ -9,7 +9,7 @@ from . import commands
 from rigAPI import CommandSource
 import logging
 
-import imp
+import importlib as imp
 imp.reload(commands)
 
 logger = logging.getLogger('hr.blender_api.rigcontrol.commandlistener')

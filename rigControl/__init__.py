@@ -11,7 +11,7 @@ def init():
     from . import blenderPlayback
     from . import CommandListener
 
-    import imp
+    import importlib as imp
 
     # Goofy hack -- It seems that we are called twice, by ../loader.py.
     # The first time by `import rigControl` at line 11, and then again by

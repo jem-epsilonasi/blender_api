@@ -15,7 +15,7 @@ import logging
 
 logger = logging.getLogger('hr.blender_api.rigcontrol.blenderplayback')
 
-class BLGlobalTimer(bpy.types.Operator):
+class BL_OT_GlobalTimer(bpy.types.Operator):
     """Timer  Control"""
     bl_label = "Global Timer"
     bl_idname = 'wm.global_timer'
@@ -31,7 +31,9 @@ class BLGlobalTimer(bpy.types.Operator):
     def execute(self, context):
         logger.info('Starting Timer')
         wm = context.window_manager
-        self._timer = wm.event_timer_add(1/self._maxFPS, context.window)
+        self._timer = wm.event_timer_add(
+            time_step=1/self._maxFPS,
+            window=context.window)
         bpy.context.scene['globalTimerStarted'] = True
         wm.modal_handler_add(self)
         return {'RUNNING_MODAL'}
@@ -45,7 +47,10 @@ class BLGlobalTimer(bpy.types.Operator):
                 wm = context.window_manager
                 wm.event_timer_remove(self._timer)
                 self._maxFPS = bpy.context.scene['maxFPS']
-                self._timer = wm.event_timer_add(1/self._maxFPS, context.window)
+                self._timer = wm.event_timer_add(
+                    time_step=1/self._maxFPS,
+                    window=context.window
+                )
 
         return {'PASS_THROUGH'}
 
@@ -63,12 +68,12 @@ class BLGlobalTimer(bpy.types.Operator):
         return not bpy.context.scene['globalTimerStarted']
 
 
-class EvaDebug(bpy.types.Operator):
+class BL_OT_EvaDebug(bpy.types.Operator):
     """Eva Debug Control"""
     bl_idname = "eva.debug"
     bl_label = "Eva Debug"
 
-    action = bpy.props.StringProperty()
+    action : bpy.props.StringProperty()
 
     # register some helper bpy props for dev purposes
     bpy.types.Scene.evaFollowMouse = bpy.props.BoolProperty(name = "evaFollowMouse")
@@ -87,7 +92,7 @@ class EvaDebug(bpy.types.Operator):
 
 
 
-class BLPlayback(bpy.types.Operator):
+class BL_OT_Playback(bpy.types.Operator):
     """Playback Control"""
     bl_label = "Start Animation"
     bl_idname = 'wm.animation_playback'
@@ -263,14 +268,14 @@ class BLPlayback(bpy.types.Operator):
 
 
 def register():
-    bpy.utils.register_class(BLPlayback)
-    bpy.utils.register_class(EvaDebug)
-    bpy.utils.register_class(BLGlobalTimer)
+    bpy.utils.register_class(BL_OT_Playback)
+    bpy.utils.register_class(BL_OT_EvaDebug)
+    bpy.utils.register_class(BL_OT_GlobalTimer)
 
 def unregister():
-    bpy.utils.unregister_class(BLPlayback)
-    bpy.utils.unregister_class(EvaDebug)
-    bpy.utils.unregister_class(BLGlobalTimer)
+    bpy.utils.unregister_class(BL_OT_Playback)
+    bpy.utils.unregister_class(BL_OT_EvaDebug)
+    bpy.utils.unregister_class(BL_OT_GlobalTimer)
 
 
 def refresh():

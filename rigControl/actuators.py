@@ -112,7 +112,7 @@ class PropertyStore:
     def register_actuator(self, actuator_name):
         # Update the scene.actuators type to include the new actuator.
         bltype_act = type('HR_ACT_{}'.format(actuator_name.capitalize()), (bpy.types.PropertyGroup,), {})
-        bltype_act.parameter_order = bpy.props.StringProperty()
+        bltype_act.parameter_order : bpy.props.StringProperty()
         bpy.utils.register_class(bltype_act)
         setattr(self.bltype_actuators, 'ACT_'+actuator_name, bpy.props.PointerProperty(type=bltype_act))
 

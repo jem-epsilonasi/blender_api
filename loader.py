@@ -1,7 +1,7 @@
 def register():
     import sys
     import bpy
-    import imp
+    import importlib as imp
 
     # setup package path
     file_path = bpy.path.abspath('//')

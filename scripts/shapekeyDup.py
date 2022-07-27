@@ -1,4 +1,5 @@
 import bpy
+
 def shapekeyDup():
     if not bpy.context.object.show_only_shape_key:
         bpy.context.object.show_only_shape_key = True

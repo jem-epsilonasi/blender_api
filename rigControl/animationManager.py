@@ -12,7 +12,7 @@ import math
 import bpy
 import random
 import time
-import imp
+import importlib as imp
 import pdb
 from mathutils import Vector
 import logging

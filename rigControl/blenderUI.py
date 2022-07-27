@@ -6,7 +6,7 @@
 
 import bpy
 
-class BLRigConsole(bpy.types.Panel):
+class BL_PT_RigConsole(bpy.types.Panel):
     """Creates a Panel in the Object properties window"""
     bl_label = "RigConsole"
     bl_space_type = 'VIEW_3D'
@@ -19,7 +19,7 @@ class BLRigConsole(bpy.types.Panel):
         layout.prop(context.scene, 'maxFPS', slider = True)
 
 
-class BLRigControl(bpy.types.Panel):
+class BL_PT_RigControl(bpy.types.Panel):
     """Creates a Panel in the Object properties window"""
     bl_label = "RigControl"
     bl_space_type = 'VIEW_3D'
@@ -136,7 +136,7 @@ class BLRigControl(bpy.types.Panel):
         col.operator('eva.debug', text='getEyesData()').action = 'commands.EvaAPI().getEyesData()'
         col.operator('eva.debug', text='getFaceData()').action = 'commands.EvaAPI().getFaceData()'
 
-class BLActuatorControl(bpy.types.Panel):
+class BL_PT_ActuatorControl(bpy.types.Panel):
     bl_label = "Actuator Control"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
@@ -179,14 +179,14 @@ class BLActuatorControl(bpy.types.Panel):
             layout.row()
 
 def register():
-    bpy.utils.register_class(BLRigControl)
-    bpy.utils.register_class(BLRigConsole)
-    bpy.utils.register_class(BLActuatorControl)
+    bpy.utils.register_class(BL_PT_RigControl)
+    bpy.utils.register_class(BL_PT_RigConsole)
+    bpy.utils.register_class(BL_PT_ActuatorControl)
 
 def unregister():
-    bpy.utils.unregister_class(BLRigControl)
-    bpy.utils.unregister_class(BLRigConsole)
-    bpy.utils.unregister_class(BLActuatorControl)
+    bpy.utils.unregister_class(BL_PT_RigControl)
+    bpy.utils.unregister_class(BL_PT_RigConsole)
+    bpy.utils.unregister_class(BL_PT_ActuatorControl)
 
 def refresh():
     try:

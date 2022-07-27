@@ -1,4 +1,5 @@
-from collections import Sequence, deque
+from collections import deque
+from collections.abc import Sequence
 from copy import copy
 from math import sqrt, atan, tan
 import random
